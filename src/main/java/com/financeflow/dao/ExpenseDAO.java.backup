@@ -1,0 +1,167 @@
+package com.financeflow.dao;
+
+import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.financeflow.config.Database;
+
+public class ExpenseDAO {
+
+    public void add(int userId, String title, String category,
+                    BigDecimal amount, LocalDate date)
+            throws SQLException {
+
+        String sql = "INSERT INTO expenses "
+                + "(user_id, title, category, amount, expense_date) "
+                + "VALUES (?, ?, ?, ?, ?)";
+
+        try (Connection c = Database.getConnection();
+             PreparedStatement p = c.prepareStatement(sql)) {
+
+            p.setInt(1, userId);
+            p.setString(2, title);
+            p.setString(3, category);
+            p.setBigDecimal(4, amount);
+            p.setDate(5, java.sql.Date.valueOf(date));
+
+            p.executeUpdate();
+        }
+    }
+
+    public List<Map<String, Object>> getByUser(int userId)
+            throws SQLException {
+
+        List<Map<String, Object>> list = new ArrayList<>();
+
+        String sql = "SELECT id, title, category, amount, expense_date "
+                + "FROM expenses "
+                + "WHERE user_id = ? "
+                + "ORDER BY expense_date DESC, id DESC";
+
+        try (Connection c = Database.getConnection();
+             PreparedStatement p = c.prepareStatement(sql)) {
+
+            p.setInt(1, userId);
+
+            try (ResultSet r = p.executeQuery()) {
+                while (r.next()) {
+                    Map<String, Object> m = new LinkedHashMap<>();
+
+                    m.put("id", r.getInt("id"));
+                    m.put("title", r.getString("title"));
+                    m.put("category", r.getString("category"));
+                    m.put("amount", r.getBigDecimal("amount"));
+                    m.put("date", r.getDate("expense_date"));
+
+                    list.add(m);
+                }
+            }
+        }
+
+        return list;
+    }
+
+    public BigDecimal getTotal(int userId) throws SQLException {
+
+        String sql = "SELECT COALESCE(SUM(amount), 0) "
+                + "FROM expenses WHERE user_id = ?";
+
+        try (Connection c = Database.getConnection();
+             PreparedStatement p = c.prepareStatement(sql)) {
+
+            p.setInt(1, userId);
+
+            try (ResultSet r = p.executeQuery()) {
+                r.next();
+                return r.getBigDecimal(1);
+            }
+        }
+    }
+
+    public List<Map<String, Object>> getCategoryTotals(int userId)
+            throws SQLException {
+
+        List<Map<String, Object>> list = new ArrayList<>();
+
+        String sql = "SELECT category, SUM(amount) AS total "
+                + "FROM expenses "
+                + "WHERE user_id = ? "
+                + "GROUP BY category "
+                + "ORDER BY total DESC";
+
+        try (Connection c = Database.getConnection();
+             PreparedStatement p = c.prepareStatement(sql)) {
+
+            p.setInt(1, userId);
+
+            try (ResultSet r = p.executeQuery()) {
+                while (r.next()) {
+                    Map<String, Object> m = new LinkedHashMap<>();
+
+                    m.put("category", r.getString("category"));
+                    m.put("total", r.getBigDecimal("total"));
+
+                    list.add(m);
+                }
+            }
+        }
+
+        return list;
+    }
+
+    public List<Map<String, Object>> getMonthlyTotals(int userId)
+            throws SQLException {
+
+        List<Map<String, Object>> list = new ArrayList<>();
+
+        String sql = "SELECT DATE_FORMAT(expense_date, '%b %Y') AS month, "
+                + "SUM(amount) AS total "
+                + "FROM expenses "
+                + "WHERE user_id = ? "
+                + "AND expense_date >= DATE_FORMAT("
+                + "DATE_SUB(CURDATE(), INTERVAL 5 MONTH), '%Y-%m-01') "
+                + "GROUP BY YEAR(expense_date), MONTH(expense_date) "
+                + "ORDER BY YEAR(expense_date), MONTH(expense_date)";
+
+        try (Connection c = Database.getConnection();
+             PreparedStatement p = c.prepareStatement(sql)) {
+
+            p.setInt(1, userId);
+
+            try (ResultSet r = p.executeQuery()) {
+                while (r.next()) {
+                    Map<String, Object> m = new LinkedHashMap<>();
+
+                    m.put("month", r.getString("month"));
+                    m.put("total", r.getBigDecimal("total"));
+
+                    list.add(m);
+                }
+            }
+        }
+
+        return list;
+    }
+
+    public void delete(int id, int userId) throws SQLException {
+
+        String sql = "DELETE FROM expenses WHERE id = ? AND user_id = ?";
+
+        try (Connection c = Database.getConnection();
+             PreparedStatement p = c.prepareStatement(sql)) {
+
+            p.setInt(1, id);
+            p.setInt(2, userId);
+
+            p.executeUpdate();
+        }
+    }
+}
